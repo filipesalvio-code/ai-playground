@@ -1,36 +1,79 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type {
-  Conversation,
-  Message,
-  Collection,
-  Document,
+import { persist, createJSONStorage } from 'zustand/middleware';
+import type { 
+  Message, 
+  Conversation, 
+  Document, 
+  RAGCollection,
   Recording,
   Transcription,
-  ViewMode,
-  Settings,
   DeepSearchQuery,
+  SpreadsheetData,
+  CurrentView
 } from './types';
+import { DEFAULT_MODEL } from './models';
 
-// ============================================
-// CONVERSATIONS STORE
-// ============================================
+// ============================================================
+// UI Store - Global UI state
+// ============================================================
+interface UIState {
+  sidebarOpen: boolean;
+  currentView: CurrentView;
+  selectedModel: string;
+  deepSearchQuery: DeepSearchQuery | null;
+  isLoading: boolean;
+  
+  // Actions
+  toggleSidebar: () => void;
+  setCurrentView: (view: CurrentView) => void;
+  setSelectedModel: (model: string) => void;
+  setDeepSearchQuery: (query: DeepSearchQuery | null | ((prev: DeepSearchQuery | null) => DeepSearchQuery | null)) => void;
+  setIsLoading: (loading: boolean) => void;
+}
 
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
+      sidebarOpen: true,
+      currentView: 'chat',
+      selectedModel: DEFAULT_MODEL,
+      deepSearchQuery: null,
+      isLoading: false,
+
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+      setCurrentView: (view) => set({ currentView: view }),
+      setSelectedModel: (model) => set({ selectedModel: model }),
+      setDeepSearchQuery: (query) => set((state) => ({ 
+        deepSearchQuery: typeof query === 'function' ? query(state.deepSearchQuery) : query 
+      })),
+      setIsLoading: (loading) => set({ isLoading: loading }),
+    }),
+    {
+      name: 'ai-playground-ui',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        sidebarOpen: state.sidebarOpen,
+        selectedModel: state.selectedModel,
+      }),
+    }
+  )
+);
+
+// ============================================================
+// Conversations Store - Chat history
+// ============================================================
 interface ConversationsState {
   conversations: Conversation[];
   currentConversationId: string | null;
   
   // Actions
   createConversation: (model: string) => string;
-  deleteConversation: (id: string) => void;
   setCurrentConversation: (id: string | null) => void;
-  getCurrentConversation: () => Conversation | null;
+  deleteConversation: (id: string) => void;
   addMessage: (conversationId: string, message: Message) => void;
   updateMessage: (conversationId: string, messageId: string, content: string) => void;
+  getCurrentConversation: () => Conversation | null;
   updateConversationTitle: (id: string, title: string) => void;
-  setConversationModel: (id: string, model: string) => void;
-  toggleRAG: (id: string) => void;
-  setCollections: (id: string, collectionIds: string[]) => void;
 }
 
 export const useConversationsStore = create<ConversationsState>()(
@@ -39,7 +82,7 @@ export const useConversationsStore = create<ConversationsState>()(
       conversations: [],
       currentConversationId: null,
 
-      createConversation: (model: string) => {
+      createConversation: (model) => {
         const id = crypto.randomUUID();
         const conversation: Conversation = {
           id,
@@ -48,216 +91,164 @@ export const useConversationsStore = create<ConversationsState>()(
           model,
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          ragEnabled: false,
-          collectionIds: [],
         };
+        
         set((state) => ({
           conversations: [conversation, ...state.conversations],
           currentConversationId: id,
         }));
+        
         return id;
       },
 
-      deleteConversation: (id: string) => {
-        set((state) => ({
-          conversations: state.conversations.filter((c) => c.id !== id),
-          currentConversationId:
-            state.currentConversationId === id ? null : state.currentConversationId,
-        }));
-      },
+      setCurrentConversation: (id) => set({ currentConversationId: id }),
 
-      setCurrentConversation: (id: string | null) => {
-        set({ currentConversationId: id });
-      },
+      deleteConversation: (id) => set((state) => {
+        const newConversations = state.conversations.filter((c) => c.id !== id);
+        const newCurrentId = state.currentConversationId === id
+          ? newConversations[0]?.id || null
+          : state.currentConversationId;
+        
+        return {
+          conversations: newConversations,
+          currentConversationId: newCurrentId,
+        };
+      }),
+
+      addMessage: (conversationId, message) => set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c.id === conversationId
+            ? {
+                ...c,
+                messages: [...c.messages, message],
+                updatedAt: Date.now(),
+                // Update title from first user message
+                title: c.messages.length === 0 && message.role === 'user'
+                  ? message.content.slice(0, 30) + (message.content.length > 30 ? '...' : '')
+                  : c.title,
+              }
+            : c
+        ),
+      })),
+
+      updateMessage: (conversationId, messageId, content) => set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c.id === conversationId
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === messageId
+                    ? { ...m, content, isStreaming: false }
+                    : m
+                ),
+                updatedAt: Date.now(),
+              }
+            : c
+        ),
+      })),
 
       getCurrentConversation: () => {
         const state = get();
         return state.conversations.find((c) => c.id === state.currentConversationId) || null;
       },
 
-      addMessage: (conversationId: string, message: Message) => {
-        set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c.id === conversationId
-              ? {
-                  ...c,
-                  messages: [...c.messages, message],
-                  updatedAt: Date.now(),
-                  title: c.messages.length === 0 && message.role === 'user' 
-                    ? message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '')
-                    : c.title,
-                }
-              : c
-          ),
-        }));
-      },
-
-      updateMessage: (conversationId: string, messageId: string, content: string) => {
-        set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c.id === conversationId
-              ? {
-                  ...c,
-                  messages: c.messages.map((m) =>
-                    m.id === messageId ? { ...m, content, isStreaming: false } : m
-                  ),
-                  updatedAt: Date.now(),
-                }
-              : c
-          ),
-        }));
-      },
-
-      updateConversationTitle: (id: string, title: string) => {
-        set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c.id === id ? { ...c, title, updatedAt: Date.now() } : c
-          ),
-        }));
-      },
-
-      setConversationModel: (id: string, model: string) => {
-        set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c.id === id ? { ...c, model, updatedAt: Date.now() } : c
-          ),
-        }));
-      },
-
-      toggleRAG: (id: string) => {
-        set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c.id === id ? { ...c, ragEnabled: !c.ragEnabled, updatedAt: Date.now() } : c
-          ),
-        }));
-      },
-
-      setCollections: (id: string, collectionIds: string[]) => {
-        set((state) => ({
-          conversations: state.conversations.map((c) =>
-            c.id === id ? { ...c, collectionIds, updatedAt: Date.now() } : c
-          ),
-        }));
-      },
+      updateConversationTitle: (id, title) => set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c.id === id ? { ...c, title } : c
+        ),
+      })),
     }),
     {
       name: 'ai-playground-conversations',
+      storage: createJSONStorage(() => localStorage),
     }
   )
 );
 
-// ============================================
-// RAG STORE
-// ============================================
-
+// ============================================================
+// RAG Store - Knowledge base
+// ============================================================
 interface RAGState {
-  collections: Collection[];
   documents: Document[];
+  collections: RAGCollection[];
   
   // Actions
-  createCollection: (name: string, description?: string) => string;
-  deleteCollection: (id: string) => void;
-  updateCollection: (id: string, updates: Partial<Collection>) => void;
   addDocument: (document: Document) => void;
   deleteDocument: (id: string) => void;
-  addDocumentToCollection: (collectionId: string, documentId: string) => void;
-  removeDocumentFromCollection: (collectionId: string, documentId: string) => void;
+  createCollection: (name: string) => string;
+  deleteCollection: (id: string) => void;
+  addDocumentToCollection: (documentId: string, collectionId: string) => void;
+  removeDocumentFromCollection: (documentId: string, collectionId: string) => void;
 }
 
 export const useRAGStore = create<RAGState>()(
   persist(
     (set) => ({
-      collections: [],
       documents: [],
+      collections: [],
 
-      createCollection: (name: string, description?: string) => {
+      addDocument: (document) => set((state) => ({
+        documents: [...state.documents, document],
+      })),
+
+      deleteDocument: (id) => set((state) => ({
+        documents: state.documents.filter((d) => d.id !== id),
+        collections: state.collections.map((c) => ({
+          ...c,
+          documentIds: c.documentIds.filter((docId) => docId !== id),
+        })),
+      })),
+
+      createCollection: (name) => {
         const id = crypto.randomUUID();
-        const collection: Collection = {
-          id,
-          name,
-          description,
-          documentIds: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
         set((state) => ({
-          collections: [...state.collections, collection],
+          collections: [
+            ...state.collections,
+            { id, name, documentIds: [], createdAt: Date.now() },
+          ],
         }));
         return id;
       },
 
-      deleteCollection: (id: string) => {
-        set((state) => ({
-          collections: state.collections.filter((c) => c.id !== id),
-        }));
-      },
+      deleteCollection: (id) => set((state) => ({
+        collections: state.collections.filter((c) => c.id !== id),
+      })),
 
-      updateCollection: (id: string, updates: Partial<Collection>) => {
-        set((state) => ({
-          collections: state.collections.map((c) =>
-            c.id === id ? { ...c, ...updates, updatedAt: Date.now() } : c
-          ),
-        }));
-      },
+      addDocumentToCollection: (documentId, collectionId) => set((state) => ({
+        collections: state.collections.map((c) =>
+          c.id === collectionId && !c.documentIds.includes(documentId)
+            ? { ...c, documentIds: [...c.documentIds, documentId] }
+            : c
+        ),
+      })),
 
-      addDocument: (document: Document) => {
-        set((state) => ({
-          documents: [...state.documents, document],
-        }));
-      },
-
-      deleteDocument: (id: string) => {
-        set((state) => ({
-          documents: state.documents.filter((d) => d.id !== id),
-          collections: state.collections.map((c) => ({
-            ...c,
-            documentIds: c.documentIds.filter((docId) => docId !== id),
-          })),
-        }));
-      },
-
-      addDocumentToCollection: (collectionId: string, documentId: string) => {
-        set((state) => ({
-          collections: state.collections.map((c) =>
-            c.id === collectionId && !c.documentIds.includes(documentId)
-              ? { ...c, documentIds: [...c.documentIds, documentId], updatedAt: Date.now() }
-              : c
-          ),
-        }));
-      },
-
-      removeDocumentFromCollection: (collectionId: string, documentId: string) => {
-        set((state) => ({
-          collections: state.collections.map((c) =>
-            c.id === collectionId
-              ? { ...c, documentIds: c.documentIds.filter((id) => id !== documentId), updatedAt: Date.now() }
-              : c
-          ),
-        }));
-      },
+      removeDocumentFromCollection: (documentId, collectionId) => set((state) => ({
+        collections: state.collections.map((c) =>
+          c.id === collectionId
+            ? { ...c, documentIds: c.documentIds.filter((id) => id !== documentId) }
+            : c
+        ),
+      })),
     }),
     {
       name: 'ai-playground-rag',
+      storage: createJSONStorage(() => localStorage),
     }
   )
 );
 
-// ============================================
-// AUDIO STORE
-// ============================================
-
+// ============================================================
+// Audio Store - Recordings and transcriptions
+// ============================================================
 interface AudioState {
   recordings: Recording[];
   transcriptions: Transcription[];
-  isRecording: boolean;
-  recordingSource: 'microphone' | 'system_audio' | 'screen' | null;
   
   // Actions
   addRecording: (recording: Recording) => void;
   deleteRecording: (id: string) => void;
   addTranscription: (transcription: Transcription) => void;
   deleteTranscription: (id: string) => void;
-  setRecording: (isRecording: boolean, source?: 'microphone' | 'system_audio' | 'screen' | null) => void;
 }
 
 export const useAudioStore = create<AudioState>()(
@@ -265,140 +256,71 @@ export const useAudioStore = create<AudioState>()(
     (set) => ({
       recordings: [],
       transcriptions: [],
-      isRecording: false,
-      recordingSource: null,
 
-      addRecording: (recording: Recording) => {
-        set((state) => ({
-          recordings: [...state.recordings, recording],
-        }));
-      },
+      addRecording: (recording) => set((state) => ({
+        recordings: [...state.recordings, recording],
+      })),
 
-      deleteRecording: (id: string) => {
-        set((state) => ({
-          recordings: state.recordings.filter((r) => r.id !== id),
-        }));
-      },
+      deleteRecording: (id) => set((state) => ({
+        recordings: state.recordings.filter((r) => r.id !== id),
+      })),
 
-      addTranscription: (transcription: Transcription) => {
-        set((state) => ({
-          transcriptions: [...state.transcriptions, transcription],
-        }));
-      },
+      addTranscription: (transcription) => set((state) => ({
+        transcriptions: [transcription, ...state.transcriptions],
+      })),
 
-      deleteTranscription: (id: string) => {
-        set((state) => ({
-          transcriptions: state.transcriptions.filter((t) => t.id !== id),
-        }));
-      },
-
-      setRecording: (isRecording: boolean, source = null) => {
-        set({ isRecording, recordingSource: source });
-      },
+      deleteTranscription: (id) => set((state) => ({
+        transcriptions: state.transcriptions.filter((t) => t.id !== id),
+      })),
     }),
     {
       name: 'ai-playground-audio',
-      partialize: (state) => ({
-        recordings: state.recordings.map((r) => ({ ...r, blob: undefined })),
-        transcriptions: state.transcriptions,
-      }),
+      storage: createJSONStorage(() => localStorage),
     }
   )
 );
 
-// ============================================
-// UI STORE
-// ============================================
-
-interface UIStore {
-  sidebarOpen: boolean;
-  currentView: ViewMode;
-  selectedModel: string;
-  compareModels: string[];
-  deepSearchQuery: DeepSearchQuery | null;
+// ============================================================
+// Spreadsheet Store - Data tables
+// ============================================================
+interface SpreadsheetState {
+  spreadsheets: (SpreadsheetData & { id: string; name: string; createdAt: number })[];
   
   // Actions
-  toggleSidebar: () => void;
-  setSidebarOpen: (open: boolean) => void;
-  setCurrentView: (view: ViewMode) => void;
-  setSelectedModel: (model: string) => void;
-  setCompareModels: (models: string[]) => void;
-  setDeepSearchQuery: (query: DeepSearchQuery | null) => void;
+  createSpreadsheet: (name: string, data: SpreadsheetData) => string;
+  updateSpreadsheet: (id: string, data: Partial<SpreadsheetData>) => void;
+  deleteSpreadsheet: (id: string) => void;
 }
 
-export const useUIStore = create<UIStore>()(
+export const useSpreadsheetStore = create<SpreadsheetState>()(
   persist(
     (set) => ({
-      sidebarOpen: true,
-      currentView: 'chat',
-      selectedModel: 'openai/gpt-4o',
-      compareModels: ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet'],
-      deepSearchQuery: null,
+      spreadsheets: [],
 
-      toggleSidebar: () => {
-        set((state) => ({ sidebarOpen: !state.sidebarOpen }));
+      createSpreadsheet: (name, data) => {
+        const id = crypto.randomUUID();
+        set((state) => ({
+          spreadsheets: [
+            ...state.spreadsheets,
+            { id, name, createdAt: Date.now(), ...data },
+          ],
+        }));
+        return id;
       },
 
-      setSidebarOpen: (open: boolean) => {
-        set({ sidebarOpen: open });
-      },
+      updateSpreadsheet: (id, data) => set((state) => ({
+        spreadsheets: state.spreadsheets.map((s) =>
+          s.id === id ? { ...s, ...data } : s
+        ),
+      })),
 
-      setCurrentView: (view: ViewMode) => {
-        set({ currentView: view });
-      },
-
-      setSelectedModel: (model: string) => {
-        set({ selectedModel: model });
-      },
-
-      setCompareModels: (models: string[]) => {
-        set({ compareModels: models });
-      },
-
-      setDeepSearchQuery: (query: DeepSearchQuery | null) => {
-        set({ deepSearchQuery: query });
-      },
+      deleteSpreadsheet: (id) => set((state) => ({
+        spreadsheets: state.spreadsheets.filter((s) => s.id !== id),
+      })),
     }),
     {
-      name: 'ai-playground-ui',
+      name: 'ai-playground-spreadsheets',
+      storage: createJSONStorage(() => localStorage),
     }
   )
 );
-
-// ============================================
-// SETTINGS STORE
-// ============================================
-
-interface SettingsStore extends Settings {
-  updateSettings: (settings: Partial<Settings>) => void;
-  resetSettings: () => void;
-}
-
-const defaultSettings: Settings = {
-  theme: 'dark',
-  defaultModel: 'openai/gpt-4o',
-  streamResponses: true,
-  autoSaveConversations: true,
-  showTokenCount: true,
-  maxContextMessages: 20,
-};
-
-export const useSettingsStore = create<SettingsStore>()(
-  persist(
-    (set) => ({
-      ...defaultSettings,
-
-      updateSettings: (settings: Partial<Settings>) => {
-        set((state) => ({ ...state, ...settings }));
-      },
-
-      resetSettings: () => {
-        set(defaultSettings);
-      },
-    }),
-    {
-      name: 'ai-playground-settings',
-    }
-  )
-);
-

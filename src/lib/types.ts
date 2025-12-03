@@ -1,39 +1,45 @@
-// ============================================
-// AI PLAYGROUND - SHARED TYPES
-// ============================================
+// ============================================================
+// Core Types
+// ============================================================
 
-// ============================================
-// CHAT & MESSAGES
-// ============================================
+export type Provider = 
+  | 'openai' 
+  | 'anthropic' 
+  | 'google' 
+  | 'xai' 
+  | 'meta' 
+  | 'perplexity' 
+  | 'mistral';
 
-export type Role = 'user' | 'assistant' | 'system';
+export interface AIModel {
+  id: string;
+  name: string;
+  provider: Provider;
+  description: string;
+  contextLength: number;
+  pricing: {
+    input: number;  // per million tokens
+    output: number; // per million tokens
+  };
+  capabilities: ('chat' | 'code' | 'vision' | 'search' | 'analysis')[];
+  isOnline: boolean; // Can search the web
+}
+
+// ============================================================
+// Chat Types
+// ============================================================
 
 export interface Message {
   id: string;
-  role: Role;
+  role: 'user' | 'assistant' | 'system';
   content: string;
-  model?: string;
   timestamp: number;
-  attachments?: Attachment[];
-  citations?: Citation[];
+  model?: string;
   isStreaming?: boolean;
-}
-
-export interface Attachment {
-  id: string;
-  name: string;
-  type: 'file' | 'image' | 'audio';
-  url?: string;
-  content?: string;
-  mimeType: string;
-  size: number;
-}
-
-export interface Citation {
-  id: string;
-  title: string;
-  url: string;
-  snippet?: string;
+  metadata?: {
+    tokens?: number;
+    ragSources?: string[];
+  };
 }
 
 export interface Conversation {
@@ -43,62 +49,38 @@ export interface Conversation {
   model: string;
   createdAt: number;
   updatedAt: number;
-  ragEnabled?: boolean;
-  collectionIds?: string[];
-}
-
-// ============================================
-// AI MODELS
-// ============================================
-
-export type Provider = 'openai' | 'anthropic' | 'google' | 'xai' | 'perplexity' | 'meta';
-
-export interface Model {
-  id: string;
-  name: string;
-  provider: Provider;
-  description: string;
-  contextLength: number;
-  pricing: {
-    input: number;  // per 1M tokens
-    output: number; // per 1M tokens
+  metadata?: {
+    ragCollectionId?: string;
+    systemPrompt?: string;
   };
-  capabilities: ModelCapability[];
-  isOnline?: boolean; // Has web search (Perplexity)
 }
 
-export type ModelCapability = 
-  | 'chat' 
-  | 'vision' 
-  | 'code' 
-  | 'function_calling' 
-  | 'json_mode'
-  | 'streaming'
-  | 'web_search';
+export interface StreamChunk {
+  type: 'content' | 'error' | 'done';
+  content?: string;
+  error?: string;
+}
 
-// ============================================
-// RAG (Retrieval-Augmented Generation)
-// ============================================
+// ============================================================
+// RAG Types
+// ============================================================
 
 export interface Document {
   id: string;
   name: string;
-  type: DocumentType;
+  type: 'pdf' | 'docx' | 'txt' | 'vtt' | 'pptx' | 'md' | 'url';
   content: string;
   metadata: DocumentMetadata;
-  chunks?: DocumentChunk[];
   createdAt: number;
 }
-
-export type DocumentType = 'pdf' | 'docx' | 'txt' | 'vtt' | 'pptx' | 'webpage' | 'audio_transcript';
 
 export interface DocumentMetadata {
   source: 'upload' | 'crawl' | 'transcription';
   originalName?: string;
   url?: string;
-  pageCount?: number;
   wordCount?: number;
-  language?: string;
+  pageCount?: number;
+  author?: string;
 }
 
 export interface DocumentChunk {
@@ -113,13 +95,11 @@ export interface DocumentChunk {
   };
 }
 
-export interface Collection {
+export interface RAGCollection {
   id: string;
   name: string;
-  description?: string;
   documentIds: string[];
   createdAt: number;
-  updatedAt: number;
 }
 
 export interface RAGSearchResult {
@@ -128,45 +108,19 @@ export interface RAGSearchResult {
   score: number;
 }
 
-// ============================================
-// WEB CRAWLING
-// ============================================
-
-export interface CrawlConfig {
-  url: string;
-  maxDepth: number;
-  maxPages: number;
-  includePaths?: string[];
-  excludePaths?: string[];
-  respectRobotsTxt: boolean;
-}
-
-export interface CrawlResult {
-  url: string;
-  title: string;
-  content: string;
-  links: string[];
-  crawledAt: number;
-  success: boolean;
-  error?: string;
-}
-
-// ============================================
-// AUDIO & TRANSCRIPTION
-// ============================================
-
-export type RecordingSource = 'microphone' | 'system_audio' | 'screen';
+// ============================================================
+// Audio Types
+// ============================================================
 
 export interface Recording {
   id: string;
   name: string;
-  source: RecordingSource;
-  duration: number; // seconds
-  size: number; // bytes
+  source: 'microphone' | 'system_audio' | 'screen';
+  duration: number;
+  size: number;
   mimeType: string;
-  blob?: Blob;
-  url?: string;
   createdAt: number;
+  blobUrl?: string;
 }
 
 export interface Transcription {
@@ -182,15 +136,15 @@ export interface Transcription {
 
 export interface TranscriptionSegment {
   id: number;
-  start: number; // seconds
-  end: number;   // seconds
+  start: number;
+  end: number;
   text: string;
   speaker?: string;
 }
 
-// ============================================
-// DEEPSEARCH
-// ============================================
+// ============================================================
+// DeepSearch Types
+// ============================================================
 
 export interface DeepSearchQuery {
   question: string;
@@ -207,98 +161,57 @@ export interface DeepSearchResult {
   sources: Citation[];
 }
 
-// ============================================
-// EXPORTS
-// ============================================
+export interface Citation {
+  id: string;
+  title: string;
+  url: string;
+  snippet?: string;
+}
 
-export type ExportFormat = 'excel' | 'pdf' | 'word' | 'ppt' | 'jpg' | 'png';
+// ============================================================
+// Spreadsheet Types
+// ============================================================
+
+export interface SpreadsheetData {
+  headers: string[];
+  rows: (string | number)[][];
+}
+
+export interface SpreadsheetExport {
+  format: 'xlsx' | 'csv' | 'google';
+  data: SpreadsheetData;
+  name: string;
+}
+
+// ============================================================
+// Export Types
+// ============================================================
+
+export type ExportFormat = 'excel' | 'pdf' | 'word' | 'ppt' | 'image';
 
 export interface ExportOptions {
   format: ExportFormat;
   title?: string;
-  includeTimestamps?: boolean;
+  author?: string;
   includeMetadata?: boolean;
-  quality?: 'low' | 'medium' | 'high';
 }
 
-// ============================================
-// SPREADSHEET
-// ============================================
+// ============================================================
+// UI Types
+// ============================================================
 
-export interface SpreadsheetData {
-  headers: string[];
-  rows: (string | number | boolean | null)[][];
-  sheetName?: string;
+export type CurrentView = 
+  | 'chat' 
+  | 'compare' 
+  | 'search' 
+  | 'deepsearch' 
+  | 'knowledge' 
+  | 'audio' 
+  | 'spreadsheet';
+
+export interface ViewConfig {
+  id: CurrentView;
+  label: string;
+  icon: string;
+  description: string;
 }
-
-export interface GoogleSheetsConfig {
-  spreadsheetId?: string;
-  sheetName?: string;
-  range?: string;
-}
-
-// ============================================
-// INTEGRATIONS
-// ============================================
-
-export interface GammaRequest {
-  prompt: string;
-  type: 'presentation' | 'document' | 'webpage';
-  style?: string;
-}
-
-export interface ConsensusSearchResult {
-  paperId: string;
-  title: string;
-  authors: string[];
-  year: number;
-  abstract: string;
-  url: string;
-  citationCount: number;
-  claim?: string;
-}
-
-// ============================================
-// API RESPONSES
-// ============================================
-
-export interface APIResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
-export interface StreamChunk {
-  type: 'content' | 'done' | 'error';
-  content?: string;
-  error?: string;
-}
-
-// ============================================
-// UI STATE
-// ============================================
-
-export type ViewMode = 'chat' | 'compare' | 'search' | 'deepsearch' | 'knowledge' | 'audio' | 'spreadsheet';
-
-export interface UIState {
-  sidebarOpen: boolean;
-  currentView: ViewMode;
-  selectedModel: string;
-  compareModels: string[];
-  ragEnabled: boolean;
-  selectedCollections: string[];
-}
-
-// ============================================
-// SETTINGS
-// ============================================
-
-export interface Settings {
-  theme: 'dark' | 'light' | 'system';
-  defaultModel: string;
-  streamResponses: boolean;
-  autoSaveConversations: boolean;
-  showTokenCount: boolean;
-  maxContextMessages: number;
-}
-

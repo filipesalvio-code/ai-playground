@@ -1,4 +1,4 @@
-import { type ClassValue, clsx } from 'clsx';
+import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 /**
@@ -9,44 +9,46 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Generate a unique ID
- */
-export function generateId(): string {
-  return crypto.randomUUID();
-}
-
-/**
- * Format a timestamp to a readable date string
+ * Format a timestamp to a human-readable date
  */
 export function formatDate(timestamp: number): string {
   const date = new Date(timestamp);
   const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } else if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays < 7) {
-    return date.toLocaleDateString([], { weekday: 'long' });
-  } else {
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const diff = now.getTime() - date.getTime();
+  
+  // Within last minute
+  if (diff < 60000) {
+    return 'Just now';
   }
+  
+  // Within last hour
+  if (diff < 3600000) {
+    const mins = Math.floor(diff / 60000);
+    return `${mins}m ago`;
+  }
+  
+  // Within last day
+  if (diff < 86400000) {
+    const hours = Math.floor(diff / 3600000);
+    return `${hours}h ago`;
+  }
+  
+  // Within last week
+  if (diff < 604800000) {
+    const days = Math.floor(diff / 86400000);
+    return `${days}d ago`;
+  }
+  
+  // Otherwise show date
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
 }
 
 /**
- * Format file size in human readable format
- */
-export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-/**
- * Format duration in seconds to mm:ss or hh:mm:ss
+ * Format duration in seconds to MM:SS or HH:MM:SS
  */
 export function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -60,133 +62,16 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
- * Truncate text to a maximum length
+ * Format file size in bytes to human-readable string
  */
-export function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 3) + '...';
-}
-
-/**
- * Debounce function
- */
-export function debounce<T extends (...args: unknown[]) => unknown>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null;
-
-  return (...args: Parameters<T>) => {
-    if (timeout) clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}
-
-/**
- * Sleep for a given number of milliseconds
- */
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Parse SSE stream data
- */
-export function parseSSEData(data: string): string | null {
-  const lines = data.split('\n');
-  for (const line of lines) {
-    if (line.startsWith('data: ')) {
-      const content = line.slice(6);
-      if (content === '[DONE]') return null;
-      try {
-        const parsed = JSON.parse(content);
-        return parsed.choices?.[0]?.delta?.content || '';
-      } catch {
-        return content;
-      }
-    }
-  }
-  return '';
-}
-
-/**
- * Extract text content from HTML
- */
-export function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, '').trim();
-}
-
-/**
- * Check if a URL is valid
- */
-export function isValidUrl(string: string): boolean {
-  try {
-    new URL(string);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Get file extension from filename
- */
-export function getFileExtension(filename: string): string {
-  return filename.split('.').pop()?.toLowerCase() || '';
-}
-
-/**
- * Get MIME type from file extension
- */
-export function getMimeType(extension: string): string {
-  const mimeTypes: Record<string, string> = {
-    pdf: 'application/pdf',
-    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    doc: 'application/msword',
-    txt: 'text/plain',
-    vtt: 'text/vtt',
-    srt: 'text/srt',
-    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    mp3: 'audio/mpeg',
-    wav: 'audio/wav',
-    m4a: 'audio/m4a',
-    webm: 'audio/webm',
-    ogg: 'audio/ogg',
-    flac: 'audio/flac',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    gif: 'image/gif',
-    webp: 'image/webp',
-  };
-  return mimeTypes[extension] || 'application/octet-stream';
-}
-
-/**
- * Convert blob to base64
- */
-export async function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * Download a blob as a file
- */
-export function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 /**
@@ -197,15 +82,118 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    return false;
+    // Fallback for older browsers
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    
+    try {
+      document.execCommand('copy');
+      return true;
+    } catch {
+      return false;
+    } finally {
+      document.body.removeChild(textArea);
+    }
   }
 }
 
 /**
- * Calculate token estimate (rough approximation)
+ * Download a blob as a file
  */
-export function estimateTokens(text: string): number {
-  // Rough estimate: ~4 characters per token for English
-  return Math.ceil(text.length / 4);
+export function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
+/**
+ * Generate a random ID
+ */
+export function generateId(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Debounce a function
+ */
+export function debounce<T extends (...args: unknown[]) => unknown>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timeoutId: NodeJS.Timeout;
+  
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
+
+/**
+ * Throttle a function
+ */
+export function throttle<T extends (...args: unknown[]) => unknown>(
+  fn: T,
+  limit: number
+): (...args: Parameters<T>) => void {
+  let inThrottle = false;
+  
+  return (...args: Parameters<T>) => {
+    if (!inThrottle) {
+      fn(...args);
+      inThrottle = true;
+      setTimeout(() => (inThrottle = false), limit);
+    }
+  };
+}
+
+/**
+ * Truncate text to a maximum length
+ */
+export function truncate(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength - 3) + '...';
+}
+
+/**
+ * Safely parse JSON
+ */
+export function safeJsonParse<T>(json: string, fallback: T): T {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+export function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Check if we're running in a browser environment
+ */
+export function isBrowser(): boolean {
+  return typeof window !== 'undefined';
+}
+
+/**
+ * Check if we're running on a mobile device
+ */
+export function isMobile(): boolean {
+  if (!isBrowser()) return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
+}
