@@ -1,36 +1,164 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Playground
+
+A comprehensive AI research and productivity platform that unifies multiple AI models (ChatGPT, Claude, Gemini, Grok, Perplexity) into a single, powerful interface.
+
+## Features
+
+- **Multi-Model Chat** - Access GPT-4, Claude, Gemini, Grok, and more through OpenRouter
+- **Model Comparison** - Compare responses from multiple models side-by-side
+- **RAG System** - Upload documents (PDF, DOCX, TXT, VTT, PPTX) for context-aware responses
+- **Web Crawling** - Crawl and index websites for your knowledge base
+- **DeepSearch** - Multi-step research with synthesized reports and citations
+- **Audio Recording** - Record microphone, system audio, or screen (for meetings)
+- **Transcription** - Convert audio to text with OpenAI Whisper
+- **Spreadsheet Creation** - Generate Excel files and Google Sheets
+- **Multi-Format Export** - Export to Excel, PDF, Word, PowerPoint, and images
+- **Gamma Integration** - Generate presentations with AI
+- **Consensus Integration** - Search academic papers
+
+## Tech Stack
+
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
+- **AI API**: OpenRouter (unified model access)
+- **Vector DB**: LanceDB (embedded)
+- **Styling**: Tailwind CSS
+- **State**: Zustand
+- **UI Components**: Radix UI / shadcn/ui
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- OpenRouter API key
+- OpenAI API key (for Whisper transcription)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd ai-playground
+
+# Install dependencies
+npm install
+
+# Copy environment variables
+cp .env.example .env.local
+
+# Edit .env.local with your API keys
+```
+
+### Environment Variables
+
+Create a `.env.local` file with:
+
+```env
+# Required
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+OPENAI_API_KEY=sk-your-key-here
+
+# Optional
+GOOGLE_SHEETS_CLIENT_EMAIL=
+GOOGLE_SHEETS_PRIVATE_KEY=
+GAMMA_API_KEY=
+CONSENSUS_API_KEY=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+### Development
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Build
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm start
+```
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── api/               # API routes
+│   │   ├── chat/          # Chat completion
+│   │   ├── compare/       # Model comparison
+│   │   ├── search/        # Web search
+│   │   ├── deepsearch/    # Research agent
+│   │   ├── rag/           # RAG operations
+│   │   ├── audio/         # Transcription
+│   │   └── export/        # File exports
+│   ├── layout.tsx
+│   ├── page.tsx
+│   └── globals.css
+├── components/
+│   ├── chat/              # Chat interface
+│   ├── sidebar/           # Navigation
+│   ├── comparison/        # Model comparison
+│   ├── rag/               # Knowledge base
+│   ├── audio/             # Recording/transcription
+│   ├── deepsearch/        # Research UI
+│   ├── export/            # Export menu
+│   ├── integrations/      # Gamma, Consensus
+│   └── ui/                # Base components
+├── lib/
+│   ├── openrouter.ts      # OpenRouter client
+│   ├── models.ts          # Model definitions
+│   ├── types.ts           # TypeScript types
+│   ├── store.ts           # Zustand stores
+│   ├── utils.ts           # Utilities
+│   ├── rag/               # RAG logic
+│   ├── audio/             # Audio handling
+│   ├── deepsearch/        # Research agent
+│   ├── export/            # Export functions
+│   └── integrations/      # Third-party APIs
+└── data/                  # LanceDB storage
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Parallel Development
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This project is designed for parallel development using Cursor's worktree feature. See `ORCHESTRATION.md` for the 6-agent build plan.
 
-## Deploy on Vercel
+## Deployment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Vercel (Recommended)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm i -g vercel
+vercel
+```
+
+### Railway
+
+```bash
+npm i -g @railway/cli
+railway login
+railway init
+railway up
+```
+
+## API Keys
+
+| Service | Purpose | Get Key |
+|---------|---------|---------|
+| OpenRouter | All AI models | [openrouter.ai/keys](https://openrouter.ai/keys) |
+| OpenAI | Whisper transcription | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| Google Cloud | Sheets API | [console.cloud.google.com](https://console.cloud.google.com) |
+| Gamma | Presentations | [gamma.app](https://gamma.app) |
+| Consensus | Academic search | [consensus.app](https://consensus.app) |
+
+## License
+
+MIT
+
+## Contributing
+
+Contributions are welcome! Please read the contributing guidelines before submitting PRs.
